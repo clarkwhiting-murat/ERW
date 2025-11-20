@@ -1,0 +1,69 @@
+name: Build Windows Executable
+
+on:
+  workflow_dispatch:  # Manual trigger from GitHub UI
+  push:
+    tags:
+      - 'v*'  # Or trigger on version tags like v1.0.0
+
+permissions:
+  contents: write  # Required to create releases
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Build executable
+      shell: cmd
+      run: |
+        pyinstaller --name "CO2_Retention_Simulator" ^
+          --onefile ^
+          --console ^
+          --add-data "static;static" ^
+          --add-data "app;app" ^
+          --hidden-import=uvicorn.lifespan.on ^
+          --hidden-import=uvicorn.lifespan.off ^
+          --hidden-import=uvicorn.protocols.http.auto ^
+          --hidden-import=uvicorn.protocols.websockets.auto ^
+          --hidden-import=uvicorn.loops.auto ^
+          --hidden-import=uvicorn.loops.uvloop ^
+          --hidden-import=uvicorn.loops.asyncio ^
+          --collect-all pydantic ^
+          --collect-all sqlalchemy ^
+          --collect-all fastapi ^
+          --collect-all numpy ^
+          --collect-all scipy ^
+          start_embedded.py
+    
+    - name: Create Release and Upload Asset
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: dist/CO2_Retention_Simulator.exe
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Upload executable as artifact (for non-tag builds)
+      if: "!startsWith(github.ref, 'refs/tags/')"
+      uses: actions/upload-artifact@v4
+      with:
+        name: CO2_Retention_Simulator-Windows
+        path: dist/CO2_Retention_Simulator.exe
+        retention-days: 30
